@@ -25,10 +25,6 @@ VoiceKey — приложение для Android TV-прошивок Hisense (п
 </p>
 
 <p align="center">
-  <img src="docs/screenshots/voice-youtube.png" width="96%" alt="«Открой на ютубе трейлер Дюна»: плашка VoiceKey и распознанная фраза">
-</p>
-
-<p align="center">
   <img src="docs/screenshots/google-panel.png" width="60%" alt="Панель поиска Google: «фильм Дюна», доступно в Lampa">
 </p>
 
