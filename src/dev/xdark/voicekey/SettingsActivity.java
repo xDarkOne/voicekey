@@ -259,26 +259,53 @@ public class SettingsActivity extends Activity {
     }
 
     private void addSetupRows() {
-        rows.add(new Setup("Настройка: доступ без компьютера",
-                "Разрешение, которое включает службу и подписку само. Выдаётся один раз с компьютера") {
+        rows.add(new Setup("Настройка: выдать права",
+                "Включите в настройках разработчика «USB debugging» и «Wi-Fi debugging». VoiceKey сам выдаст себе всё нужное; на экране подтвердите запрос и отметьте «Всегда разрешать»") {
+            private boolean working;
+            private String status;
+
             @Override boolean done() {
                 return canWriteSecure();
             }
 
             @Override String adbHint() {
-                return "С компьютера один раз: " + ADB_GRANT;
+                return "С компьютера один раз: " + ADB_GRANT + " — или включите отладку и повторите";
             }
 
-            @Override boolean fix() {
-                return false;
+            @Override boolean hidden() {
+                return done() && !working;
             }
 
             @Override String value() {
-                return "Нужен adb";
+                if (working) return "Подтвердите запрос на экране…";
+                return status != null ? status : "OK — выдать";
             }
 
             @Override String hintNow() {
-                return adbHint() + ". Без него службу и подписку включают вручную, а после сна — снова";
+                return status != null && !working ? adbHint() : hint;
+            }
+
+            @Override boolean fix() {
+                if (working) return true;
+                working = true;
+                status = null;
+                String pkg = getPackageName();
+                String listener = new android.content.ComponentName(SettingsActivity.this, WakeListener.class).flattenToString();
+                new Thread(() -> {
+                    try {
+                        SelfAdb.shell(SettingsActivity.this, "appops set " + pkg + " REQUEST_INSTALL_PACKAGES allow;"
+                                + "cmd notification allow_listener " + listener + ";"
+                                + "pm grant " + pkg + " android.permission.RECORD_AUDIO;"
+                                + "pm grant " + pkg + " android.permission.WRITE_SECURE_SETTINGS");
+                        if (canWriteSecure()) Journal.log(SettingsActivity.this, "self-adb: " + BootReceiver.heal(SettingsActivity.this));
+                    } catch (SelfAdb.Failure | RuntimeException e) {
+                        Journal.log(SettingsActivity.this, "self-adb failed: " + e);
+                        status = "Не вышло: " + e.getMessage();
+                    }
+                    working = false;
+                    handler.post(SettingsActivity.this::refresh);
+                }, "self-adb").start();
+                return true;
             }
         });
         rows.add(new Setup("Настройка: микрофон", "Разрешение на запись звука — нужно распознавателю речи") {
