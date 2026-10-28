@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="dev.xdark.voicekey"
-    android:versionCode="58"
-    android:versionName="5.16">
+    android:versionCode="59"
+    android:versionName="5.17">
 
     <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="30" />
 
@@ -13,6 +13,7 @@
          The audio comes from the remote, through the recognizer. -->
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <!-- The offline speech model is downloaded once, from its authors. -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.INTERNET" />
 
     <queries>

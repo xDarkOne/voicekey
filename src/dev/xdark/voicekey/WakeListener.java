@@ -68,6 +68,7 @@ public class WakeListener extends NotificationListenerService {
         } catch (RuntimeException e) {
             Journal.log(this, "watch next failed to start: " + e);
         }
+        handler.postDelayed(() -> Updater.checkInBackground(this), 60_000);
         for (long delay : RECHECK_MILLIS) {
             handler.postDelayed(() -> {
                 if (!BootReceiver.isRunning(this)) Journal.log(this, "recheck: " + BootReceiver.heal(this));

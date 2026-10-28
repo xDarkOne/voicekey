@@ -25,6 +25,8 @@ public class SettingsActivity extends Activity {
     private final List<Row> rows = new ArrayList<>();
     private volatile boolean downloading;
     private boolean deleteArmed;
+    /** What the update row says while it works or after it failed; null when idle. */
+    private volatile String updating;
 
     /** One line of the list: what it is, its value now, how the value moves. */
     private abstract class Row {
@@ -153,6 +155,25 @@ public class SettingsActivity extends Activity {
                 () -> Prefs.translate(this), on -> Prefs.setTranslate(this, on)));
         rows.add(new Toggle("Звуковые сигналы", "Короткий звук, когда можно говорить, и после",
                 () -> Prefs.sounds(this), on -> Prefs.setSounds(this, on)));
+        rows.add(new Row("Обновление", null) {
+            @Override String value() {
+                if (updating != null) return updating;
+                String[] found = Prefs.foundUpdate(SettingsActivity.this);
+                return found != null ? "Есть " + found[0] + " — OK, установить"
+                        : "Версия " + Updater.currentVersion(SettingsActivity.this) + " — OK, проверить";
+            }
+
+            @Override String hintNow() {
+                return "Новые версии берутся со страницы проекта на GitHub; система спросит подтверждение";
+            }
+
+            @Override void change(int step) {
+                if (updating != null && !updating.startsWith("Не ") && !updating.startsWith("Нет")) return;
+                update(Prefs.foundUpdate(SettingsActivity.this) != null);
+            }
+        });
+        rows.add(new Toggle("Проверять обновления", "Раз в полдня, когда проектор включён; об итоге скажет надпись сверху",
+                () -> Prefs.autoUpdate(this), on -> Prefs.setAutoUpdate(this, on)));
 
         setContentView(build());
         refresh();
@@ -259,5 +280,27 @@ public class SettingsActivity extends Activity {
             downloading = false;
             handler.post(this::refresh);
         }, "model-download").start();
+    }
+
+    /** Checks for a newer release, or, if one is known, downloads it and hands it to the installer. */
+    private void update(boolean install) {
+        updating = install ? "Скачиваю…" : "Проверяю…";
+        refresh();
+        new Thread(() -> {
+            try {
+                if (!install) {
+                    updating = Updater.check(this) ? null : "Нет новой версии — OK, проверить";
+                } else {
+                    Updater.install(this, text -> {
+                        updating = text.equals("Готово") ? null : text;
+                        handler.post(this::refresh);
+                    });
+                }
+            } catch (Exception e) {
+                Journal.log(this, "update failed: " + e);
+                updating = "Не вышло (" + e.getClass().getSimpleName() + ") — OK, ещё раз";
+            }
+            handler.post(this::refresh);
+        }, "update").start();
     }
 }

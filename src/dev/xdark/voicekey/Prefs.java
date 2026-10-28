@@ -113,4 +113,35 @@ final class Prefs {
     static void setSounds(Context c, boolean on) {
         prefs(c).edit().putBoolean("sounds", on).apply();
     }
+
+    /** Look for a newer release now and then, without being asked. */
+    static boolean autoUpdate(Context c) {
+        return prefs(c).getBoolean("auto_update", true);
+    }
+
+    static void setAutoUpdate(Context c, boolean on) {
+        prefs(c).edit().putBoolean("auto_update", on).apply();
+    }
+
+    static long lastUpdateCheck(Context c) {
+        return prefs(c).getLong("update_checked", 0);
+    }
+
+    static void setLastUpdateCheck(Context c, long millis) {
+        prefs(c).edit().putLong("update_checked", millis).apply();
+    }
+
+    /** The newer release found last time: its version name and the APK's address; null if none. */
+    static String[] foundUpdate(Context c) {
+        String v = prefs(c).getString("update_version", null);
+        String u = prefs(c).getString("update_url", null);
+        return v == null || u == null ? null : new String[] {v, u, prefs(c).getString("update_sha256", "")};
+    }
+
+    static void setFoundUpdate(Context c, String version, String url, String sha256) {
+        SharedPreferences.Editor e = prefs(c).edit();
+        if (version == null) e.remove("update_version").remove("update_url").remove("update_sha256");
+        else e.putString("update_version", version).putString("update_url", url).putString("update_sha256", sha256);
+        e.apply();
+    }
 }

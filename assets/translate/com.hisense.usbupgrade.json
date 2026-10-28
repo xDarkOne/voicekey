@@ -1,0 +1,18 @@
+{
+"exact": {
+"Camera Upgrade": "Обновление камеры",
+"There is camera upgrading file in U disk, will you upgrade it?": "На USB-накопителе есть файл обновления камеры. Обновить?",
+"Cancel": "Отмена",
+"Upgrade": "Обновить",
+"Storage space is not enough. Please press OK to uninstall not used app": "Недостаточно места. Нажмите OK, чтобы удалить неиспользуемое приложение.",
+"Not found upgrading package in U disk": "Пакет обновления не найден на USB-накопителе",
+"Radar Firmware Upgrade": "Обновление прошивки радара",
+"There is radar firmware upgrading file in U disk, will you upgrade it?": "На USB-накопителе есть файл обновления прошивки радара. Обновить?",
+"System Info": "Системная информация",
+"There is upgrading package in U disk, will you upgrade it?": "На USB-накопителе есть пакет обновления. Обновить?",
+"Upgrading package in U disk is the same, will you upgrade it again?": "Пакет обновления на USB-накопителе совпадает с текущим. Повторить обновление?",
+"Touch Firmware Upgrade": "Обновление прошивки сенсора",
+"There is touch firmware upgrading file in U disk, will you upgrade it?": "На USB-накопителе есть файл обновления прошивки сенсора. Обновить?"
+},
+"patterns": []
+}

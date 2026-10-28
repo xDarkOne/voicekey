@@ -8,5 +8,3 @@ __pycache__/
 backup-hisense-apks/
 snapshot-*/
 a11y-before.txt
-# словари экранного переводчика собраны из чужих переводов, см. docs/translator.md
-assets/translate/
