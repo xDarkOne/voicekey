@@ -50,6 +50,48 @@ public class SettingsActivity extends Activity {
         String hintNow() {
             return hint;
         }
+
+        /** Setup rows disappear once what they set up is done. */
+        boolean hidden() {
+            return false;
+        }
+    }
+
+    /**
+     * A step of the first setup: shows while the thing is not done. OK does it, or opens the system
+     * screen for it; where the firmware has no such screen, the row says which adb command does it.
+     */
+    private abstract class Setup extends Row {
+        /** What the row says after OK found no way but adb. */
+        String failed;
+
+        Setup(String title, String hint) {
+            super(title, hint);
+        }
+
+        abstract boolean done();
+
+        abstract String adbHint();
+
+        /** Does it from inside the app; false if that is not possible. */
+        abstract boolean fix();
+
+        @Override boolean hidden() {
+            return done();
+        }
+
+        @Override String value() {
+            return failed != null ? failed : "OK — настроить";
+        }
+
+        @Override String hintNow() {
+            return failed != null ? adbHint() : hint;
+        }
+
+        @Override void change(int step) {
+            failed = null;
+            if (!fix()) failed = "Нет экрана — нужен adb";
+        }
     }
 
     private class Toggle extends Row {
@@ -101,8 +143,13 @@ public class SettingsActivity extends Activity {
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
-        new Thread(() -> Journal.log(this, "settings opened: " + BootReceiver.heal(this)), "heal").start();
+        new Thread(() -> {
+            Journal.log(this, "settings opened: " + BootReceiver.heal(this));
+            // The system binds the service a moment after the list changes.
+            handler.postDelayed(this::refresh, 2_500);
+        }, "heal").start();
 
+        addSetupRows();
         rows.add(new Toggle("Кнопка микрофона", "Выкл. — кнопка остаётся прошивке или другому приложению",
                 () -> Prefs.micOn(this), on -> Prefs.setMicOn(this, on)));
         rows.add(new Choice<>("Нажатие", "Что делает короткое нажатие кнопки микрофона",
@@ -177,7 +224,141 @@ public class SettingsActivity extends Activity {
 
         setContentView(build());
         refresh();
-        if (!rows.isEmpty()) rows.get(0).view.requestFocus();
+        for (Row row : rows) {
+            if (!row.hidden()) {
+                row.view.requestFocus();
+                break;
+            }
+        }
+    }
+
+    /** Back from a system screen: the step may be done now. */
+    @Override
+    protected void onResume() {
+        super.onResume();
+        if (!rows.isEmpty() && rows.get(0).view != null) refresh();
+    }
+
+    private boolean canWriteSecure() {
+        return checkSelfPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
+    private static final String ADB_GRANT =
+            "adb shell pm grant dev.xdark.voicekey android.permission.WRITE_SECURE_SETTINGS";
+
+    /** Opens a system screen; false where the firmware does not have it. */
+    private boolean open(android.content.Intent intent) {
+        try {
+            startActivity(intent);
+            return true;
+        } catch (RuntimeException e) {
+            Journal.log(this, "no system screen for " + intent.getAction() + ": " + e);
+            return false;
+        }
+    }
+
+    private void addSetupRows() {
+        rows.add(new Setup("Настройка: доступ без компьютера",
+                "Разрешение, которое включает службу и подписку само. Выдаётся один раз с компьютера") {
+            @Override boolean done() {
+                return canWriteSecure();
+            }
+
+            @Override String adbHint() {
+                return "С компьютера один раз: " + ADB_GRANT;
+            }
+
+            @Override boolean fix() {
+                return false;
+            }
+
+            @Override String value() {
+                return "Нужен adb";
+            }
+
+            @Override String hintNow() {
+                return adbHint() + ". Без него службу и подписку включают вручную, а после сна — снова";
+            }
+        });
+        rows.add(new Setup("Настройка: микрофон", "Разрешение на запись звука — нужно распознавателю речи") {
+            @Override boolean done() {
+                return checkSelfPermission(android.Manifest.permission.RECORD_AUDIO)
+                        == android.content.pm.PackageManager.PERMISSION_GRANTED;
+            }
+
+            @Override String adbHint() {
+                return "adb shell pm grant dev.xdark.voicekey android.permission.RECORD_AUDIO";
+            }
+
+            @Override boolean fix() {
+                requestPermissions(new String[]{android.Manifest.permission.RECORD_AUDIO}, 1);
+                return true;
+            }
+        });
+        rows.add(new Setup("Настройка: служба кнопки микрофона",
+                "Включить «VoiceKey: кнопка микрофона» в специальных возможностях") {
+            @Override boolean done() {
+                return BootReceiver.isRunning(SettingsActivity.this);
+            }
+
+            @Override String adbHint() {
+                return ADB_GRANT + " — и откройте VoiceKey ещё раз";
+            }
+
+            @Override boolean fix() {
+                if (canWriteSecure()) {
+                    new Thread(() -> {
+                        Journal.log(SettingsActivity.this, "setup: " + BootReceiver.heal(SettingsActivity.this));
+                        handler.post(SettingsActivity.this::refresh);
+                    }, "heal").start();
+                    return true;
+                }
+                return open(new android.content.Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS));
+            }
+        });
+        rows.add(new Setup("Настройка: возврат после сна",
+                "Подписка на уведомления: по ней система снова запускает VoiceKey после сна. Уведомления он не читает") {
+            @Override boolean done() {
+                return getSystemService(android.app.NotificationManager.class).isNotificationListenerAccessGranted(
+                        new android.content.ComponentName(SettingsActivity.this, WakeListener.class));
+            }
+
+            @Override String adbHint() {
+                return "adb shell cmd notification allow_listener dev.xdark.voicekey/dev.xdark.voicekey.WakeListener";
+            }
+
+            @Override boolean fix() {
+                String me = new android.content.ComponentName(SettingsActivity.this, WakeListener.class).flattenToString();
+                if (canWriteSecure()) {
+                    String now = android.provider.Settings.Secure.getString(getContentResolver(), "enabled_notification_listeners");
+                    android.provider.Settings.Secure.putString(getContentResolver(), "enabled_notification_listeners",
+                            now == null || now.isEmpty() ? me : now + ":" + me);
+                    return true;
+                }
+                return open(new android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+            }
+        });
+        rows.add(new Setup("Настройка: обновления из приложения",
+                "Разрешить VoiceKey устанавливать обновления («неизвестные источники»)") {
+            @Override boolean done() {
+                return getPackageManager().canRequestPackageInstalls();
+            }
+
+            @Override String adbHint() {
+                return "adb shell appops set dev.xdark.voicekey REQUEST_INSTALL_PACKAGES allow";
+            }
+
+            @Override boolean fix() {
+                return open(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                        android.net.Uri.parse("package:" + getPackageName())));
+            }
+        });
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int code, String[] permissions, int[] results) {
+        refresh();
     }
 
     private View build() {
@@ -256,6 +437,7 @@ public class SettingsActivity extends Activity {
 
     private void refresh() {
         for (Row row : rows) {
+            row.view.setVisibility(row.hidden() ? View.GONE : View.VISIBLE);
             row.valueView.setText(row.value());
             String h = row.hintNow();
             row.hintView.setText(h == null ? "" : h);
