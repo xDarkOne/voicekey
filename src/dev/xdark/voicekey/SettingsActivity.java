@@ -389,6 +389,31 @@ public class SettingsActivity extends Activity {
                     + " 2>&1; sleep 3; getprop persist.sys.locale");
             return "LocaleTool " + debugLang + " → " + out.replace('\n', ' ');
         }));
+        rows.add(new DebugAction("Отчёт о зависании",
+                "Если проектор сам перезагрузился: что система записала о причине. Полный текст сохраняется в файл", () -> {
+            StringBuilder full = new StringBuilder();
+            StringBuilder summary = new StringBuilder();
+            for (String tag : new String[] {"system_server_watchdog", "SYSTEM_RESTART", "SYSTEM_LAST_KMSG", "system_server_anr"}) {
+                String text = SelfAdb.shell(this, "dumpsys dropbox --print " + tag + " 2>&1");
+                full.append("==== ").append(tag).append('\n').append(text).append('\n');
+                int lines = text.isEmpty() ? 0 : text.split("\n").length;
+                summary.append(tag).append(": ").append(lines).append(" строк\n");
+                int shown = 0;
+                for (String line : text.split("\n")) {
+                    if (shown < 8 && line.matches("(?i).*(voicekey|accessib|waiting to lock|held by|Blocked in|Watchdog:).*")) {
+                        summary.append("  ").append(line.length() > 100 ? line.substring(0, 100) + "…" : line).append('\n');
+                        shown++;
+                    }
+                }
+            }
+            java.io.File dir = getExternalFilesDir(null);
+            if (dir != null) {
+                java.io.File file = new java.io.File(dir, "watchdog.txt");
+                java.nio.file.Files.write(file.toPath(), full.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+                summary.append("Полный текст: ").append(file.getPath());
+            }
+            return summary.toString().trim();
+        }));
         rows.add(new DebugAction("Журнал", "Последние записи VoiceKey, в том числе о языке", () -> {
             java.io.StringWriter text = new java.io.StringWriter();
             Journal.tail(this, new java.io.PrintWriter(text), 12);
