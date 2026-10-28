@@ -498,6 +498,10 @@ public class SettingsActivity extends Activity {
         }
     }
 
+    private static final String VOICE_SERVICE_URL =
+            "https://github.com/xDarkOne/voicekey/releases/download/voice-service/Vidda-Voice-Service.apk";
+    private static final String VOICE_SERVICE_SHA256 = "8baddc4007bdd7b40a04a86fba7f51ec828c51a90255d4b57d19751fb49ee668";
+
     private void addSetupRows() {
         rows.add(new Setup("Настройка: выдать права",
                 "Включите в настройках разработчика «USB debugging» и «Wi-Fi debugging». VoiceKey сам выдаст себе всё нужное; на экране подтвердите запрос и отметьте «Всегда разрешать»") {
@@ -604,6 +608,78 @@ public class SettingsActivity extends Activity {
                     return true;
                 }
                 return open(new android.content.Intent("android.settings.ACTION_NOTIFICATION_LISTENER_SETTINGS"));
+            }
+        });
+        rows.add(new Setup("Настройка: голосовой сервис Google",
+                "Нужен для онлайн-распознавания: скачать Vidda-Voice-Service (28 МБ) из релиза VoiceKey и поставить. На экране системы нажмите «Установить»") {
+            private volatile String status;
+            private volatile boolean working;
+
+            private boolean installed() {
+                try {
+                    getPackageManager().getPackageInfo(KeyService.SEARCH_PACKAGE, 0);
+                    return true;
+                } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+                    return false;
+                }
+            }
+
+            @Override boolean done() {
+                return Prefs.engine(SettingsActivity.this) == Prefs.Engine.OFFLINE
+                        || VoiceActivity.voiceServiceReady(SettingsActivity.this);
+            }
+
+            @Override boolean hidden() {
+                return done() && !working;
+            }
+
+            @Override String adbHint() {
+                return "Поставьте Vidda-Voice-Service.apk из релиза voice-service на GitHub, затем: adb shell pm grant "
+                        + KeyService.SEARCH_PACKAGE + " android.permission.RECORD_AUDIO";
+            }
+
+            @Override String value() {
+                if (status != null) return status;
+                return installed() ? "OK — выдать микрофон" : "OK — скачать и поставить";
+            }
+
+            @Override String hintNow() {
+                return failed != null ? adbHint() : hint;
+            }
+
+            @Override boolean fix() {
+                if (working) return true;
+                working = true;
+                status = installed() ? "Выдаю микрофон…" : "Скачиваю…";
+                new Thread(() -> {
+                    try {
+                        if (!installed()) {
+                            Updater.installOther(SettingsActivity.this, VOICE_SERVICE_URL, VOICE_SERVICE_SHA256,
+                                    KeyService.SEARCH_PACKAGE, text -> {
+                                        status = text.equals("Готово") ? "Установлено" : text;
+                                        handler.post(SettingsActivity.this::refresh);
+                                    });
+                            // The system's screen decides; wait for it, then give the service the microphone.
+                            for (int i = 0; i < 120 && !installed(); i++) Thread.sleep(1000);
+                        }
+                        if (installed()) {
+                            SelfAdb.shell(SettingsActivity.this, "pm grant " + KeyService.SEARCH_PACKAGE
+                                    + " android.permission.RECORD_AUDIO");
+                            Journal.log(SettingsActivity.this, "voice service: "
+                                    + (VoiceActivity.voiceServiceReady(SettingsActivity.this) ? "ready" : "installed, no microphone"));
+                            status = VoiceActivity.voiceServiceReady(SettingsActivity.this) ? null
+                                    : "Нет микрофона у сервиса — нужен adb";
+                        } else {
+                            status = "Не установлено — OK, ещё раз";
+                        }
+                    } catch (Exception e) {
+                        Journal.log(SettingsActivity.this, "voice service failed: " + e);
+                        status = "Не вышло (" + e.getClass().getSimpleName() + ") — OK, ещё раз";
+                    }
+                    working = false;
+                    handler.post(SettingsActivity.this::refresh);
+                }, "voice-service").start();
+                return true;
             }
         });
         rows.add(new Setup("Настройка: обновления из приложения",

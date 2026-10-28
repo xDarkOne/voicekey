@@ -142,9 +142,20 @@ final class Updater {
     }
 
     private static void download(Context context, String[] found, Progress progress) throws Exception {
-        File apk = new File(context.getCacheDir(), "update.apk");
+        File apk = fetch(context, found[1], found[2], "update.apk", progress);
+        commit(context, apk, context.getPackageName(), progress);
+    }
+
+    /** Another app that VoiceKey leans on, fetched from our own release and installed through the system screen. */
+    static void installOther(Context context, String url, String sha256, String pkg, Progress progress) throws Exception {
+        File apk = fetch(context, url, sha256, "other.apk", progress);
+        commit(context, apk, pkg, progress);
+    }
+
+    private static File fetch(Context context, String url, String sha256, String name, Progress progress) throws Exception {
+        File apk = new File(context.getCacheDir(), name);
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        HttpURLConnection http = (HttpURLConnection) new URL(found[1]).openConnection();
+        HttpURLConnection http = (HttpURLConnection) new URL(url).openConnection();
         http.setConnectTimeout(15_000);
         http.setReadTimeout(30_000);
         try (InputStream in = http.getInputStream(); OutputStream out = new FileOutputStream(apk)) {
@@ -161,16 +172,20 @@ final class Updater {
         }
         StringBuilder hex = new StringBuilder();
         for (byte b : digest.digest()) hex.append(String.format("%02x", b));
-        if (!found[2].isEmpty() && !found[2].equalsIgnoreCase(hex.toString())) {
+        if (!sha256.isEmpty() && !sha256.equalsIgnoreCase(hex.toString())) {
             apk.delete();
             throw new SecurityException("checksum mismatch");
         }
+        return apk;
+    }
+
+    private static void commit(Context context, File apk, String pkg, Progress progress) throws Exception {
         progress.report("Устанавливаю…");
 
         PackageInstaller installer = context.getPackageManager().getPackageInstaller();
         PackageInstaller.SessionParams params = new PackageInstaller.SessionParams(
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
-        params.setAppPackageName(context.getPackageName());
+        params.setAppPackageName(pkg);
         int id = installer.createSession(params);
         try (PackageInstaller.Session session = installer.openSession(id)) {
             try (InputStream in = new FileInputStream(apk);

@@ -44,6 +44,22 @@ public class VoiceActivity extends Activity implements RecognitionListener {
     private static final ComponentName RECOGNIZER = new ComponentName(KeyService.SEARCH_PACKAGE,
             "com.google.android.katniss.search.serviceapi.KatnissRecognitionService");
 
+    /** How long to wait for the recognizer to say it is ready before calling it dead. */
+    private static final long CONNECT_MILLIS = 12_000;
+    private boolean heardReady;
+
+    /** The Vidda voice service that turns the remote's audio into Google's recognizer is installed and may record. */
+    static boolean voiceServiceReady(android.content.Context context) {
+        android.content.pm.PackageManager pm = context.getPackageManager();
+        try {
+            pm.getPackageInfo(KeyService.SEARCH_PACKAGE, 0);
+        } catch (android.content.pm.PackageManager.NameNotFoundException e) {
+            return false;
+        }
+        return pm.checkPermission(android.Manifest.permission.RECORD_AUDIO, KeyService.SEARCH_PACKAGE)
+                == android.content.pm.PackageManager.PERMISSION_GRANTED;
+    }
+
     private static final String HINT = "Скажите: «открой Кинопоиск», «найди на ютубе …», «найди в Лампе …»";
 
     private static final long SHOW_PHRASE_MILLIS = 900;
@@ -81,6 +97,15 @@ public class VoiceActivity extends Activity implements RecognitionListener {
         }
         current = this;
         boolean wantsOffline = Prefs.engine(this) == Prefs.Engine.OFFLINE;
+        if (!wantsOffline && !voiceServiceReady(this)) {
+            // Without Google's voice service the request would hang on "connecting" for ever.
+            Journal.log(this, "online recognizer missing: " + (ModelStore.ready(this) ? "offline instead" : "no fallback"));
+            if (!ModelStore.ready(this)) {
+                fail("Нет голосового сервиса Google. Настройки VoiceKey → «Настройка: голосовой сервис» или офлайн-модель");
+                return;
+            }
+            wantsOffline = true;
+        }
         if (wantsOffline && ModelStore.ready(this)) {
             show(State.CONNECTING, "Загружаю офлайн-распознавание…");
             offline = new OfflineEngine(this, this);
@@ -88,6 +113,12 @@ public class VoiceActivity extends Activity implements RecognitionListener {
             return;
         }
         show(State.CONNECTING, wantsOffline ? "Офлайн-модель не скачана — слушаю онлайн" : "Подключаюсь…");
+        handler.postDelayed(() -> {
+            if (!heardReady && !done) {
+                Journal.log(this, "recognizer silent for " + CONNECT_MILLIS + " ms");
+                onError(SpeechRecognizer.ERROR_NETWORK_TIMEOUT);
+            }
+        }, CONNECT_MILLIS);
         recognizer = SpeechRecognizer.createSpeechRecognizer(this, RECOGNIZER);
         recognizer.setRecognitionListener(this);
         recognizer.startListening(new Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH)
@@ -193,6 +224,7 @@ public class VoiceActivity extends Activity implements RecognitionListener {
 
     @Override
     public void onReadyForSpeech(Bundle params) {
+        heardReady = true;
         show(State.LISTENING, target == null ? "Говорите команду" : "Поиск в " + Apps.locative(target) + " — говорите");
         beep(ToneGenerator.TONE_PROP_BEEP, 120);
     }
