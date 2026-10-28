@@ -214,6 +214,11 @@ public class SettingsActivity extends Activity {
                 return "ru".equals(chosen != null ? chosen : running()) ? "en" : "ru";
             }
 
+            private String lastLine(String text) {
+                String[] lines = text.trim().split("\\n");
+                return lines[lines.length - 1].trim();
+            }
+
             private String name(String tag) {
                 return "ru".equals(tag) ? "Русский" : "en".equals(tag) ? "English" : tag;
             }
@@ -242,8 +247,25 @@ public class SettingsActivity extends Activity {
                 status = null;
                 new Thread(() -> {
                     try {
-                        SelfAdb.shell(SettingsActivity.this, "setprop persist.sys.locale " + target);
-                        chosen = target;
+                        // Each method is judged by reading the value back, not by its exit status.
+                        String got = SelfAdb.shell(SettingsActivity.this,
+                                "setprop persist.sys.locale " + target + " 2>&1; getprop persist.sys.locale");
+                        String how = "setprop";
+                        if (!lastLine(got).equals(target)) {
+                            Journal.log(SettingsActivity.this, "setprop did not stick: " + got);
+                            // The way locale-changer apps do it: the activity manager updates and saves the configuration.
+                            got = SelfAdb.shell(SettingsActivity.this, "CLASSPATH=" + getPackageCodePath()
+                                    + " app_process /system/bin dev.xdark.voicekey.LocaleTool " + target
+                                    + " 2>&1; getprop persist.sys.locale");
+                            how = "через настройки системы";
+                        }
+                        if (lastLine(got).equals(target)) {
+                            chosen = target;
+                            status = "Готово (" + how + "): " + name(target) + ", проверено";
+                        } else {
+                            Journal.log(SettingsActivity.this, "locale fallback failed: " + got);
+                            status = "Не вышло: система оставила «" + lastLine(got) + "»";
+                        }
                     } catch (SelfAdb.Failure | RuntimeException e) {
                         Journal.log(SettingsActivity.this, "set locale failed: " + e);
                         status = "Не вышло: " + e.getMessage();
