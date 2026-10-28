@@ -20,6 +20,10 @@ VoiceKey — приложение для Android TV-прошивок Hisense (п
   <img src="docs/screenshots/settings-update.png" width="48%" alt="Обновление в настройках">
 </p>
 
+<p align="center">
+  <img src="docs/screenshots/translation.png" width="40%" alt="Русские надписи поверх системных настроек прошивки">
+</p>
+
 ## Установка
 
 Нужен компьютер с [adb](https://developer.android.com/tools/adb) в одной сети с проектором. На проекторе включите «Отладка по USB / по сети» в режиме разработчика.
