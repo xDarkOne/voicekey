@@ -200,6 +200,60 @@ public class SettingsActivity extends Activity {
         });
         rows.add(new Toggle("Перевод интерфейса", "Русские надписи поверх настроек и приложений Hisense",
                 () -> Prefs.translate(this), on -> Prefs.setTranslate(this, on)));
+        rows.add(new Row("Язык системы", null) {
+            private volatile boolean working;
+            private volatile String status;
+            /** The language set by this row; it shows in the running configuration only after a restart. */
+            private volatile String chosen;
+
+            private String running() {
+                return getResources().getConfiguration().getLocales().get(0).getLanguage();
+            }
+
+            private String target() {
+                return "ru".equals(chosen != null ? chosen : running()) ? "en" : "ru";
+            }
+
+            private String name(String tag) {
+                return "ru".equals(tag) ? "Русский" : "en".equals(tag) ? "English" : tag;
+            }
+
+            @Override String value() {
+                if (working) return "Подтвердите запрос на экране…";
+                if (status != null) return status;
+                if (chosen != null && !chosen.equals(running())) return "Сейчас: " + name(running()) + " → " + name(chosen);
+                return "Сейчас: " + name(running());
+            }
+
+            @Override String hintNow() {
+                if (status != null && status.startsWith("Не вышло")) {
+                    return "С компьютера: adb shell setprop persist.sys.locale ru (или en) — и перезагрузка";
+                }
+                String pending = chosen != null && !chosen.equals(running())
+                        ? "Выбрано: " + name(chosen) + ", вступит в силу после перезагрузки проектора. " : "";
+                return pending + "OK или стрелки — переключить на " + name(target())
+                        + ". Нужна включённая отладка (как в «Настройка: выдать права»), потом перезагрузка";
+            }
+
+            @Override void change(int step) {
+                if (working) return;
+                String target = target();
+                working = true;
+                status = null;
+                new Thread(() -> {
+                    try {
+                        SelfAdb.shell(SettingsActivity.this, "setprop persist.sys.locale " + target);
+                        chosen = target;
+                    } catch (SelfAdb.Failure | RuntimeException e) {
+                        Journal.log(SettingsActivity.this, "set locale failed: " + e);
+                        status = "Не вышло: " + e.getMessage();
+                    }
+                    working = false;
+                    handler.post(SettingsActivity.this::refresh);
+                }, "set-locale").start();
+                refresh();
+            }
+        });
         rows.add(new Toggle("Звуковые сигналы", "Короткий звук, когда можно говорить, и после",
                 () -> Prefs.sounds(this), on -> Prefs.setSounds(this, on)));
         rows.add(new Row("Обновление", null) {
