@@ -88,6 +88,7 @@ public class KeyService extends AccessibilityService {
 
     private void onWindowOf(String pkg) {
         if (isOverlay(pkg) || pkg.equals(lastApp)) return;
+        keyFilter(!pkg.toLowerCase(java.util.Locale.ROOT).contains("settings"));
         if (Apps.VIMU.equals(pkg)) {
             vimuFromLampa = Apps.LAMPA.equals(lastApp);
         } else if (Apps.VIMU.equals(lastApp) && vimuFromLampa) {
@@ -105,6 +106,28 @@ public class KeyService extends AccessibilityService {
     private boolean isOverlay(String pkg) {
         return pkg.equals("com.android.systemui") || pkg.equals(getPackageName()) || pkg.equals("android")
                 || pkg.equals("com.hisense.tv.aivirtualassistant");
+    }
+
+    private boolean filtering = true;
+
+    /**
+     * Key filtering makes system_server re-inject every key from its main thread and wait for the
+     * window; with Settings' developer menu on screen that wait never ends and the watchdog reboots
+     * the projector. So the filter is off while Settings is in front (the mic key is dead there).
+     */
+    private void keyFilter(boolean on) {
+        if (on == filtering) return;
+        try {
+            android.accessibilityservice.AccessibilityServiceInfo info = getServiceInfo();
+            if (info == null) return;
+            int flag = android.accessibilityservice.AccessibilityServiceInfo.FLAG_REQUEST_FILTER_KEY_EVENTS;
+            info.flags = on ? info.flags | flag : info.flags & ~flag;
+            setServiceInfo(info);
+            filtering = on;
+            Journal.log(this, "key filter " + (on ? "on" : "off"));
+        } catch (RuntimeException e) {
+            Journal.log(this, "key filter switch failed: " + e);
+        }
     }
 
     /** `adb shell dumpsys activity service dev.xdark.voicekey/.KeyService [lines]`: the journal's tail. */
