@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="dev.xdark.voicekey"
+    android:versionCode="58"
+    android:versionName="5.16">
+
+    <uses-sdk android:minSdkVersion="28" android:targetSdkVersion="30" />
+
+    <!-- Granted over adb: lets the app put its accessibility service back after a reboot. -->
+    <uses-permission android:name="android.permission.WRITE_SECURE_SETTINGS" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Never records: the recognition service checks that its caller holds it.
+         The audio comes from the remote, through the recognizer. -->
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+    <!-- The offline speech model is downloaded once, from its authors. -->
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <queries>
+        <package android:name="org.vidda.googlevoicesearch" />
+        <package android:name="io.gh.reisxd.tizentube.cobalt" />
+        <package android:name="top.rootu.lampa" />
+        <package android:name="ru.kinopoisk.tv" />
+        <package android:name="com.vk.tv" />
+        <package android:name="ru.rutube.app.tv" />
+        <package android:name="ru.rutube.app" />
+        <package android:name="me.pnsrc.futuba" />
+        <provider android:authorities="android.media.tv" />
+    </queries>
+
+    <application
+        android:label="VoiceKey"
+        android:icon="@drawable/ic_launcher"
+        android:banner="@drawable/banner"
+        android:allowBackup="false"
+        android:extractNativeLibs="true">
+
+        <service
+            android:name=".KeyService"
+            android:exported="true"
+            android:label="VoiceKey: кнопка микрофона"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/key_service" />
+        </service>
+
+        <!-- Asks for speech and hands the text to TizenTube. Its own task, so TizenTube's
+             stays below and gets the search as a new intent. -->
+        <activity
+            android:name=".VoiceActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="false"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Testing over adb: a phrase as text instead of speech. DUMP is the shell's, no app's. -->
+        <activity-alias
+            android:name=".TestPhrase"
+            android:targetActivity=".VoiceActivity"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+
+        <!-- Opened from the app list: the settings; opening them also puts the service back. -->
+        <activity
+            android:name=".SettingsActivity"
+            android:exported="true"
+            android:label="VoiceKey"
+            android:theme="@android:style/Theme.DeviceDefault.NoActionBar.Fullscreen">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+                <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
+            </intent-filter>
+        </activity>
+
+        <!-- Re-enables the service by hand (adb, scripts); no longer in the app list. -->
+        <activity
+            android:name=".BootReceiver$Heal"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".WakeListener"
+            android:exported="true"
+            android:label="VoiceKey: возврат после сна"
+            android:permission="android.permission.BIND_NOTIFICATION_LISTENER_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.notification.NotificationListenerService" />
+            </intent-filter>
+        </service>
+
+        <!-- "Continue watching" cards open here, then in TizenTube: launchers keep a card inside its publisher. -->
+        <activity
+            android:name=".OpenFromRow"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Posters of the Watch Next cards for TizenTube, read by the TV provider and launchers. -->
+        <provider
+            android:name=".ArtProvider"
+            android:authorities="dev.xdark.voicekey.art"
+            android:exported="true" />
+
+        <receiver
+            android:name=".BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <!-- Hisense: the panel turns on after sleep. Going to sleep, the firmware force-stops
+                     nearly every app, and Android drops a stopped app's accessibility service; this
+                     broadcast reaches stopped apps (FLAG_INCLUDE_STOPPED_PACKAGES), so it brings it back. -->
+                <action android:name="android.intent.action.ACTION_PANEL_ON" />
+            </intent-filter>
+        </receiver>
+    </application>
+</manifest>

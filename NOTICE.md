@@ -1,0 +1,14 @@
+# Сторонние компоненты
+
+VoiceKey собирается вместе с двумя библиотеками; их скачивает `tools/fetch-libs.sh`, в репозитории их нет.
+
+| Компонент | Лицензия |
+|---|---|
+| [Vosk](https://github.com/alphacep/vosk-api) (`vosk-android` 0.3.75) | Apache-2.0 |
+| [JNA](https://github.com/java-native-access/jna) 5.18.1 | Apache-2.0 или LGPL-2.1+ |
+
+Русскую модель распознавания `vosk-model-small-ru` (Apache-2.0, авторы — Alpha Cephei) приложение
+само скачивает с alphacephei.com, когда вы включаете офлайн-распознавание.
+
+Приложение `org.vidda.googlevoicesearch`, через которое работает онлайн-распознавание, в репозиторий
+не входит и не распространяется: VoiceKey лишь обращается к нему, если оно установлено.

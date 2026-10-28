@@ -1,0 +1,12 @@
+build/
+*.apk
+*.idsig
+*.keystore
+libs/*.aar
+__pycache__/
+# локальные копии прошивки и снимки состояния проектора
+backup-hisense-apks/
+snapshot-*/
+a11y-before.txt
+# словари экранного переводчика собраны из чужих переводов, см. docs/translator.md
+assets/translate/
