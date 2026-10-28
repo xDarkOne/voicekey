@@ -406,6 +406,22 @@ public class SettingsActivity extends Activity {
                     }
                 }
             }
+            // Who holds the lock: the stack of system_server's main thread, as the watchdog dumped it.
+            String[] all = full.toString().split("\n");
+            for (int i = 0; i < all.length; i++) {
+                if (all[i].startsWith("\"main\" ") && all[i].contains(" tid=1 ")) {
+                    summary.append("Главный поток:\n");
+                    for (int j = i + 1, shown = 0; j < all.length && shown < 14; j++) {
+                        String line = all[j].trim();
+                        if (line.startsWith("at ") || line.startsWith("- ")) {
+                            summary.append(' ').append(line.length() > 100 ? line.substring(0, 100) + "…" : line).append('\n');
+                            shown++;
+                        }
+                        if (line.isEmpty()) break;
+                    }
+                    break;
+                }
+            }
             java.io.File dir = getExternalFilesDir(null);
             if (dir != null) {
                 java.io.File file = new java.io.File(dir, "watchdog.txt");
