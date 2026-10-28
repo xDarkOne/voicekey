@@ -43,6 +43,15 @@ final class Prefs {
         return context.getSharedPreferences(FILE, Context.MODE_PRIVATE);
     }
 
+    /** The system language chosen in the settings ("ru" or "en"), or null; put back after boot, as the firmware resets it. */
+    static String locale(Context c) {
+        return prefs(c).getString("locale", null);
+    }
+
+    static void setLocale(Context c, String tag) {
+        prefs(c).edit().putString("locale", tag).apply();
+    }
+
     /** Whether VoiceKey takes the mic button at all; off, it is the firmware's or another app's. */
     static boolean micOn(Context c) {
         return prefs(c).getBoolean("mic", true);

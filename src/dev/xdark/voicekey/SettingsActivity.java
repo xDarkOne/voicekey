@@ -94,6 +94,50 @@ public class SettingsActivity extends Activity {
         }
     }
 
+    /** The hidden diagnostics section: closed until opened by its row. */
+    private boolean debugOpen;
+    private String debugLang = "ru";
+
+    /** A diagnostics step: runs [job] off the main thread and keeps its text as the row's hint. */
+    private class DebugAction extends Row {
+        private final java.util.concurrent.Callable<String> job;
+        private volatile String result;
+        private volatile boolean working;
+
+        DebugAction(String title, String hint, java.util.concurrent.Callable<String> job) {
+            super(title, hint);
+            this.job = job;
+        }
+
+        @Override boolean hidden() {
+            return !debugOpen;
+        }
+
+        @Override String value() {
+            return working ? "Выполняю…" : "OK — выполнить";
+        }
+
+        @Override String hintNow() {
+            return result != null ? result : hint;
+        }
+
+        @Override void change(int step) {
+            if (working) return;
+            working = true;
+            new Thread(() -> {
+                try {
+                    result = job.call();
+                } catch (Exception e) {
+                    result = "Ошибка: " + e.getMessage();
+                }
+                Journal.log(SettingsActivity.this, "debug \"" + title + "\": " + result.replace('\n', ' '));
+                working = false;
+                handler.post(SettingsActivity.this::refresh);
+            }, "debug-row").start();
+            refresh();
+        }
+    }
+
     private class Toggle extends Row {
         private final java.util.function.Supplier<Boolean> get;
         private final java.util.function.Consumer<Boolean> set;
@@ -261,6 +305,7 @@ public class SettingsActivity extends Activity {
                         }
                         if (lastLine(got).equals(target)) {
                             chosen = target;
+                            Prefs.setLocale(SettingsActivity.this, target);
                             status = "Готово (" + how + "): " + name(target) + ", проверено";
                         } else {
                             Journal.log(SettingsActivity.this, "locale fallback failed: " + got);
@@ -297,6 +342,62 @@ public class SettingsActivity extends Activity {
         });
         rows.add(new Toggle("Проверять обновления", "Раз в полдня, когда проектор включён; об итоге скажет надпись сверху",
                 () -> Prefs.autoUpdate(this), on -> Prefs.setAutoUpdate(this, on)));
+
+        rows.add(new Row("Отладка", "Для разбора, почему не меняется язык: пробы и состояние системы") {
+            @Override String value() {
+                return debugOpen ? "Открыта" : "Скрыта";
+            }
+
+            @Override void change(int step) {
+                debugOpen = !debugOpen;
+                refresh();
+            }
+        });
+        rows.add(new Row("Язык для проб", "Какой язык ставят две пробы ниже") {
+            @Override boolean hidden() {
+                return !debugOpen;
+            }
+
+            @Override String value() {
+                return debugLang;
+            }
+
+            @Override void change(int step) {
+                debugLang = "ru".equals(debugLang) ? "en" : "ru";
+                refresh();
+            }
+        });
+        rows.add(new DebugAction("Состояние языка",
+                "Что говорят система и прошивка. Пришлите этот текст разработчику", () -> {
+            String props = SelfAdb.shell(this, "echo persist.sys.locale=$(getprop persist.sys.locale);"
+                    + "echo persist.sys.language=$(getprop persist.sys.language);"
+                    + "echo ro.product.locale=$(getprop ro.product.locale);"
+                    + "echo system_locales=$(settings get system system_locales)");
+            return "Выбрано в VoiceKey: " + Prefs.locale(this) + "\nКонфигурация сейчас: "
+                    + getResources().getConfiguration().getLocales().toLanguageTags() + "\n" + props;
+        }));
+        rows.add(new DebugAction("Проба 1: setprop",
+                "Ставит persist.sys.locale и через 3 секунды читает обратно", () -> {
+            String out = SelfAdb.shell(this, "setprop persist.sys.locale " + debugLang
+                    + " 2>&1; sleep 3; getprop persist.sys.locale");
+            return "setprop " + debugLang + " → в системе: " + out;
+        }));
+        rows.add(new DebugAction("Проба 2: через систему",
+                "Просит систему сменить язык (как приложения-переключатели), читает через 3 секунды", () -> {
+            String out = SelfAdb.shell(this, "CLASSPATH=" + getPackageCodePath()
+                    + " app_process /system/bin dev.xdark.voicekey.LocaleTool " + debugLang
+                    + " 2>&1; sleep 3; getprop persist.sys.locale");
+            return "LocaleTool " + debugLang + " → " + out.replace('\n', ' ');
+        }));
+        rows.add(new DebugAction("Журнал", "Последние записи VoiceKey, в том числе о языке", () -> {
+            java.io.StringWriter text = new java.io.StringWriter();
+            Journal.tail(this, new java.io.PrintWriter(text), 12);
+            StringBuilder out = new StringBuilder();
+            for (String line : text.toString().split("\n")) {
+                out.append(line.length() > 110 ? line.substring(0, 110) + "…" : line).append('\n');
+            }
+            return out.toString().trim();
+        }));
 
         setContentView(build());
         refresh();

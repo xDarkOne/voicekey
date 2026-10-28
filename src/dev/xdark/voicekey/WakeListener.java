@@ -69,10 +69,39 @@ public class WakeListener extends NotificationListenerService {
             Journal.log(this, "watch next failed to start: " + e);
         }
         handler.postDelayed(() -> Updater.checkInBackground(this), 60_000);
+        handler.postDelayed(this::restoreLocale, 45_000);
         for (long delay : RECHECK_MILLIS) {
             handler.postDelayed(() -> {
                 if (!BootReceiver.isRunning(this)) Journal.log(this, "recheck: " + BootReceiver.heal(this));
             }, delay);
         }
+    }
+
+    private static long lastLocaleTry;
+
+    /**
+     * The firmware puts its own language back at boot. If one was chosen in the settings and the
+     * system runs another, set it again the way the settings row does (needs the debugging the
+     * row already used, so no new question). Tried once in a few minutes at most.
+     */
+    private void restoreLocale() {
+        String wanted = Prefs.locale(this);
+        if (wanted == null) return;
+        String running = getResources().getConfiguration().getLocales().get(0).getLanguage();
+        long now = android.os.SystemClock.elapsedRealtime();
+        if (running.equals(wanted) || now - lastLocaleTry < 300_000 && lastLocaleTry != 0) return;
+        lastLocaleTry = now;
+        new Thread(() -> {
+            try {
+                String before = SelfAdb.shell(this, "getprop persist.sys.locale");
+                String got = SelfAdb.shell(this, "CLASSPATH=" + getPackageCodePath()
+                        + " app_process /system/bin dev.xdark.voicekey.LocaleTool " + wanted
+                        + " 2>&1; getprop persist.sys.locale");
+                Journal.log(this, "locale restore: wanted " + wanted + ", system ran " + running
+                        + ", prop was '" + before + "', now: " + got.replace('\n', ' '));
+            } catch (SelfAdb.Failure | RuntimeException e) {
+                Journal.log(this, "locale restore failed: " + e);
+            }
+        }, "restore-locale").start();
     }
 }
