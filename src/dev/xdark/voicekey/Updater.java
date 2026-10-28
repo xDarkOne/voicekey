@@ -156,13 +156,13 @@ final class Updater {
                 PackageInstaller.SessionParams.MODE_FULL_INSTALL);
         params.setAppPackageName(context.getPackageName());
         int id = installer.createSession(params);
-        try (PackageInstaller.Session session = installer.openSession(id);
-             InputStream in = new FileInputStream(apk);
-             OutputStream out = session.openWrite("VoiceKey.apk", 0, apk.length())) {
-            byte[] buf = new byte[64 * 1024];
-            for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
-            session.fsync(out);
-            out.close();
+        try (PackageInstaller.Session session = installer.openSession(id)) {
+            try (InputStream in = new FileInputStream(apk);
+                 OutputStream out = session.openWrite("VoiceKey.apk", 0, apk.length())) {
+                byte[] buf = new byte[64 * 1024];
+                for (int n; (n = in.read(buf)) > 0; ) out.write(buf, 0, n);
+                session.fsync(out);
+            }
 
             // The result comes back to a receiver that lives only as long as this screen.
             BroadcastReceiver result = new BroadcastReceiver() {
