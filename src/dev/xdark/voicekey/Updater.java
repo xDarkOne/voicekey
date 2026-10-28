@@ -124,8 +124,24 @@ final class Updater {
      * installer has taken it; the system's confirmation screen is opened by [context] itself.
      */
     static void install(Context context, Progress progress) throws Exception {
-        String[] found = Prefs.foundUpdate(context);
+        String[] found = pending(context);
         if (found == null) throw new IllegalStateException("no update found");
+        try {
+            download(context, found, progress);
+        } catch (java.io.FileNotFoundException e) {
+            // The release is gone (replaced or withdrawn): look again, so the next try has the right one.
+            try { check(context); } catch (Exception ignored) { }
+            throw e;
+        }
+    }
+
+    /** The release found earlier, if it is still newer than what's installed; null otherwise. */
+    static String[] pending(Context context) {
+        String[] found = Prefs.foundUpdate(context);
+        return found != null && newer(found[0], currentVersion(context)) ? found : null;
+    }
+
+    private static void download(Context context, String[] found, Progress progress) throws Exception {
         File apk = new File(context.getCacheDir(), "update.apk");
         MessageDigest digest = MessageDigest.getInstance("SHA-256");
         HttpURLConnection http = (HttpURLConnection) new URL(found[1]).openConnection();

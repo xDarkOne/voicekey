@@ -158,7 +158,7 @@ public class SettingsActivity extends Activity {
         rows.add(new Row("Обновление", null) {
             @Override String value() {
                 if (updating != null) return updating;
-                String[] found = Prefs.foundUpdate(SettingsActivity.this);
+                String[] found = Updater.pending(SettingsActivity.this);
                 return found != null ? "Есть " + found[0] + " — OK, установить"
                         : "Версия " + Updater.currentVersion(SettingsActivity.this) + " — OK, проверить";
             }
@@ -169,7 +169,7 @@ public class SettingsActivity extends Activity {
 
             @Override void change(int step) {
                 if (updating != null && !updating.startsWith("Не ") && !updating.startsWith("Нет")) return;
-                update(Prefs.foundUpdate(SettingsActivity.this) != null);
+                update(Updater.pending(SettingsActivity.this) != null);
             }
         });
         rows.add(new Toggle("Проверять обновления", "Раз в полдня, когда проектор включён; об итоге скажет надпись сверху",
