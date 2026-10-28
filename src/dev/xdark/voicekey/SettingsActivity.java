@@ -393,21 +393,38 @@ public class SettingsActivity extends Activity {
                 "Если проектор сам перезагрузился: что система записала о причине. Полный текст сохраняется в файл", () -> {
             StringBuilder full = new StringBuilder();
             StringBuilder summary = new StringBuilder();
+            try {
+                summary.append("VoiceKey ").append(getPackageManager().getPackageInfo(getPackageName(), 0).versionName).append('\n');
+            } catch (Exception ignored) {
+            }
+            String latestWatchdog = "";
             for (String tag : new String[] {"system_server_watchdog", "SYSTEM_RESTART", "SYSTEM_LAST_KMSG", "system_server_anr"}) {
                 String text = SelfAdb.shell(this, "dumpsys dropbox --print " + tag + " 2>&1");
                 full.append("==== ").append(tag).append('\n').append(text).append('\n');
-                int lines = text.isEmpty() ? 0 : text.split("\n").length;
-                summary.append(tag).append(": ").append(lines).append(" строк\n");
+                // Only the newest entry: the dropbox keeps older crashes too.
+                String[] lines = text.split("\n");
+                int start = 0, count = 0;
+                for (int i = 0; i < lines.length; i++) {
+                    if (lines[i].matches("^\\d{4}-\\d\\d-\\d\\d \\d\\d:\\d\\d:\\d\\d .*")) {
+                        start = i;
+                        count++;
+                    }
+                }
+                StringBuilder last = new StringBuilder();
+                for (int i = start; i < lines.length; i++) last.append(lines[i]).append('\n');
+                if (tag.equals("system_server_watchdog")) latestWatchdog = last.toString();
+                summary.append(tag).append(": записей ").append(count).append(", последняя ")
+                        .append(lines.length > start ? lines[start] : "—").append('\n');
                 int shown = 0;
-                for (String line : text.split("\n")) {
-                    if (shown < 8 && line.matches("(?i).*(voicekey|accessib|waiting to lock|held by|Blocked in|Watchdog:).*")) {
+                for (String line : last.toString().split("\n")) {
+                    if (shown < 4 && line.matches("(?i).*(voicekey|waiting to lock|held by|Blocked in|Watchdog:).*")) {
                         summary.append("  ").append(line.length() > 100 ? line.substring(0, 100) + "…" : line).append('\n');
                         shown++;
                     }
                 }
             }
-            // Who holds the lock: the stack of system_server's main thread, as the watchdog dumped it.
-            String[] all = full.toString().split("\n");
+            // Who holds the lock: the stack of system_server's main thread in the newest watchdog dump.
+            String[] all = latestWatchdog.split("\n");
             for (int i = 0; i < all.length; i++) {
                 if (all[i].startsWith("\"main\" ") && all[i].contains(" tid=1 ")) {
                     summary.append("Главный поток:\n");
@@ -422,6 +439,11 @@ public class SettingsActivity extends Activity {
                     break;
                 }
             }
+            java.io.StringWriter journal = new java.io.StringWriter();
+            Journal.tail(this, new java.io.PrintWriter(journal), 200);
+            String filterLine = "";
+            for (String line : journal.toString().split("\n")) if (line.contains("key filter")) filterLine = line;
+            summary.append("Фильтр клавиш, последняя запись: ").append(filterLine.isEmpty() ? "нет" : filterLine).append('\n');
             java.io.File dir = getExternalFilesDir(null);
             if (dir != null) {
                 java.io.File file = new java.io.File(dir, "watchdog.txt");
