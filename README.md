@@ -21,6 +21,10 @@ VoiceKey — приложение для Android TV-прошивок Hisense (п
 </p>
 
 <p align="center">
+  <img src="docs/screenshots/voice.png" width="96%" alt="Голосовой поиск: плашка «говорите» и результат в YouTube">
+</p>
+
+<p align="center">
   <img src="docs/screenshots/translation.png" width="40%" alt="Русские надписи поверх системных настроек прошивки">
 </p>
 
